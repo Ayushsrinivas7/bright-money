@@ -3,8 +3,9 @@ import uuid
 
 from django.shortcuts import render
 from django.db.models import Sum
-from loan_management_service.models import UserInformation, UserTransactionInformation
 from django.http import HttpResponse
+from loan_management_service.models import UserInformation, UserTransactionInformation
+from loan_management_service.config import ACCOUNT_BALANCE_CONFIG, CREDIT_SCORE_CONFIG
 
 app_name = "loan_management_service"
 # Create your views here.
@@ -25,7 +26,6 @@ def register_user(request):
         # also check if user already registered
         user = UserInformation.objects.create(name=name, email=email_id, annual_income=annual_income, aadhar_id=aadhar_id)
 
-
         # calculating credit score which will be invoked in a celery task further
         user = UserInformation.objects.filter(aadhar_id=11223344).first()
         total_credit = UserTransactionInformation.objects.filter(user_id=user.aadhar_id, transaction_type='CREDIT').aggregate(total_amount=Sum('amount'))
@@ -36,12 +36,14 @@ def register_user(request):
 
         total_account_balance = total_credit_amount-total_debit_amount
         credit_score = 0
-        if total_account_balance <= 100000: # value to be stored in config
-            credit_score = 300
-        elif total_account_balance >= 1000000:
-            credit_score = 900
+        if total_account_balance <= ACCOUNT_BALANCE_CONFIG['MIN_VALUE']: # value to be stored in config
+            credit_score = CREDIT_SCORE_CONFIG['MIN_SCORE']
+        elif total_account_balance >= ACCOUNT_BALANCE_CONFIG['MAX_VALUE']:
+            credit_score = CREDIT_SCORE_CONFIG['MAX_SCORE']
         else:
-            credit_score = (total_account_balance//15000)+300
+            balance_change = ACCOUNT_BALANCE_CONFIG['BALANCE_CHANGE']
+            increment = ACCOUNT_BALANCE_CONFIG['INCREMENT']
+            credit_score = (total_account_balance//balance_change)+increment
         
 
 
