@@ -1,11 +1,12 @@
 import json
 import uuid
 
+from datetime import datetime,timedelta
 from django.shortcuts import render
 from django.db.models import Sum
 from django.http import HttpResponse
-from loan_management_service.models import UserInformation, UserTransactionInformation
-from loan_management_service.config import ACCOUNT_BALANCE_CONFIG, CREDIT_SCORE_CONFIG
+from loan_management_service.models import UserInformation, UserTransactionInformation, LoanInfo, EMIDetails
+from loan_management_service.constants import ACCOUNT_BALANCE_CONFIG, CREDIT_SCORE_CONFIG, SUPPORTED_LOAN_TYPES, LOAN_BOUNDS, USER_INCOME_FOR_LOAN
 
 app_name = "loan_management_service"
 # Create your views here.
@@ -46,8 +47,8 @@ def register_user(request):
             credit_score = (total_account_balance//balance_change)+increment
         
 
-
         ctx = {
+            "user_uuid": user.uuid,
             "user_name": user.name,
             "total_credit": total_credit,
             "total_debit": total_debit,
@@ -58,6 +59,100 @@ def register_user(request):
         try: 
             return HttpResponse(json.dumps(ctx), status=201, content_type="application/json")
         except Exception as e:
-            return HttpResponse(json.dumps({"msg":"some error occured"}, status=400, content_type="application/json"))
+            print(f"ERROR is {e}")
+            return HttpResponse(json.dumps({"msg":"some error occured"}), status=400, content_type="application/json")
 
     return HttpResponse(status=401)
+
+
+def apply_loan(request):
+
+    if request.method == "POST":
+
+        payload = json.loads(request.body)
+        user_uuid = payload.get('user_uuid')
+        loan_type = payload.get('loan_type')
+        loan_amount = payload.get('loan_amount')
+        interest_rate = payload.get('interest_rate')
+        term_period = payload.get('term_period')
+        disbursement_date = payload.get('disbursement_date')
+
+
+        if loan_type not in SUPPORTED_LOAN_TYPES:
+            message = {'msg': 'loan type not found'}
+
+        loan_bound_amount = LOAN_BOUNDS[loan_type]
+        if loan_amount > loan_bound_amount:
+            message = {'msg': 'loan amount out of bounds'}
+        
+        user = UserInformation.objects.filter(user_uuid=user_uuid).first()
+
+        if user is None:
+            message = {'msg': 'user not registered'}
+
+        if user.annual_income >= USER_INCOME_FOR_LOAN:
+            message = {'msg': 'annual income below threshold to apply for loan'}
+
+        if interest_rate <= 14:
+            message = {'msg': 'interest rate below threshold'}
+    
+        interest = (principal_amount*interest_rate*term_period)/100
+
+        if interest < 10000:  
+            message = {'msg': 'low interest'}
+        
+        principal_amount = loan_amount
+        monthly_rate = interest_rate/12
+        n = term_period-1
+        emi = get_emi_for_loan(None, principal_amount, monthly_rate, n)
+
+        monthly_income = user.annual_income//12
+        emi_threshold = 0.06*monthly_income
+
+        if emi > emi_threshold:
+            message = {'msg': 'interest rate below threshold'}
+
+        loan_details = LoanInfo.objects.create(user_uuid=user.user_uuid, loan_type=loan_type, loan_amount=loan_amount, 
+                                                annual_interest_rate=interest_rate, term_period=term_period, disbursement_date=disbursement_date)
+
+        save_emi_details(loan_details.id, emi,disbursement_date, term_period)
+
+        loan_id = loan_details.id
+        emi_details_objects = EMIDetails.objects.filter(loan_id=loan_details.id).all()
+
+        for emi_details in emi_details_objects:
+            pass
+            #make a dictionary of all the values for due amount and installment date
+    
+
+    def save_emi_details(loan_id, emi, disbursement_date, term_period):
+
+        emi_models = []
+        for i in range(term_period):
+            installment_date = disbursement_date+timedelta()
+            emi_model = EMIDetails(loan_id=loan_id, amount_due=emi, installment_date=installment_date)
+            emi_models.append(emi_model)
+
+        EMIDetails.bulk_create(emi_models)
+    
+
+    def get_emi_for_loan(loan_id, principal_amount, monthly_rate, term_period):
+
+        if loan_id is None:
+            return (principal_amount*monthly_rate*(1+monthly_rate)**term_period)/((1+monthly_rate)**term_period-1)
+        else:
+            pass
+
+    def get_statement(request):
+
+        # check whether any loan entry exists against that loan id
+        """
+        past_transactions :
+        1. get_all_entries against the loan_id where amount_paid is not zero and extract date, principal, interest, amount_paid
+
+        upcoming_transactions :
+        1. get_all_entries against the loan_id where amount_paid is zero and eextract their amount_due and due_date
+
+        """
+
+        
