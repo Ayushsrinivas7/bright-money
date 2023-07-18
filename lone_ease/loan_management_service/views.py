@@ -143,7 +143,37 @@ def apply_loan(request):
         else:
             pass
 
-    def get_statement(request):
+    def make_payment(request):
+
+        if request.method == "POST":
+
+            payload = json.loads(request.body)
+            loan_id = payload.get('loan_id')
+            amount = payload.get('amount')
+
+            loan_info = LoanInfo.objects.filter(loan_id=loan_id).first()
+            if not loan_info:
+                # loan does not exist
+                pass
+
+            datetime_obj = 0
+            emi_info = EMIDetails.objects.filter(loan_id=loan_info.id, installment_date=datetime_obj).first()
+            if emi_info.amount_due>0 and emi_info.amount_paid>0:
+                #emi has been paid for this month
+                pass
+
+            if amount == emi_info.amount_due:
+                # update the amount_paid to amount_due
+                pass
+            else:
+                # recalculate the emi's for the next months
+                # calculate the interest and principal amount
+                # update emi for every entry after the current entry
+                # if emi's due are zero update the amount_due to 0 for the next entries
+                pass
+
+
+    def get_statement(request, loan_id):
 
         # check whether any loan entry exists against that loan id
         """
@@ -154,5 +184,14 @@ def apply_loan(request):
         1. get_all_entries against the loan_id where amount_paid is zero and eextract their amount_due and due_date
 
         """
+        # Past Transactions 
+        if request.method == "GET":
 
-        
+            loan_info = LoanInfo.objects.filter(loan_id=loan_id).first()
+            if loan_info is None:
+                message = {'msg': 'no loan has been applied'}
+
+            past_transactions = LoanInfo.objects.filter(loan_id=loan_info.id, amount_due__gt=0, amount_paid__gt=0).values()
+
+            upcoming_transactions = LoanInfo.objects.filter(loan_id=loan_info.id, amount_due__gt=0, amount_paid=0).values()
+
