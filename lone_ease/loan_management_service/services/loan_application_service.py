@@ -1,16 +1,16 @@
 from datetime import datetime
 
-from ..constants import LOAN_BOUNDS, SUPPORTED_LOAN_TYPES, USER_INCOME_FOR_LOAN
+from ..constants import LOAN_BOUNDS, SUPPORTED_LOAN_TYPES, USER_INCOME_FOR_LOAN, ACCOUNT_BALANCE_CONFIG, CREDIT_SCORE_CONFIG
 from ..models_service import (EMIDetailsDbService, LoanInformationDbService,
                               UserInformationDbService,
-                              UserTransactionInformation)
+                              UserTransactionInformationDbService)
 from ..utils import LoanCalculations
 
 
 class UserRegistrationService:
     def __init__(self):
         self.user_information_db_service = UserInformationDbService()
-        self.user_transaction_db_service = UserTransactionInformation()
+        self.user_transaction_db_service = UserTransactionInformationDbService()
 
     def register_user(self, payload):
         aadhar_id = payload.get("aadhar_id")
@@ -19,28 +19,35 @@ class UserRegistrationService:
         annual_income = payload.get("annual_income")
 
         # registering a user
+        is_user_exist = self.user_information_db_service.get_user_by_aadhar(aadhar_id)
+        if is_user_exist:
+            return {'message': 'User already exists'}
         # also check if user already registered
-        user = UserInformation.objects.create(
-            name=name, email=email_id, annual_income=annual_income, aadhar_id=aadhar_id
-        )
+        user = self.user_information_db_service.create_user(name, email_id, annual_income, aadhar_id)
 
         # calculating credit score which will be invoked in a celery task further
-        user = UserInformation.objects.filter(aadhar_id=11223344).first()
-        total_credit = UserTransactionInformation.objects.filter(
-            user_id=user.aadhar_id, transaction_type="CREDIT"
-        ).aggregate(total_amount=Sum("amount"))
-        total_debit = UserTransactionInformation.objects.filter(
-            user_id=user.aadhar_id, transaction_type="DEBIT"
-        ).aggregate(total_amount=Sum("amount"))
+        response = self.calculate_credit_score(user.aadhar_id)
+        if response.get('message'):
+            return {
+                'message': 'user successfully registered',
+                'data': {
+                    'user_uuid': user.user_uuid
+                }}
+        else:
+            return {'message': 'Not able to calculate credit score'}
+        
+    def calculate_credit_score(self, aadhar_id):
+
+        
+        total_credit = self.user_transaction_db_service.get_transactions_sum(aadhar_id, "CREDIT")
+        total_debit = self.user_transaction_db_service.get_transactions_sum(aadhar_id, "DEBIT")
 
         total_credit_amount = int(total_credit["total_amount"])
         total_debit_amount = int(total_debit["total_amount"])
 
-        total_account_balance = total_credit_amount - total_debit_amount
+        total_account_balance = total_credit_amount-total_debit_amount
         credit_score = 0
-        if (
-            total_account_balance <= ACCOUNT_BALANCE_CONFIG["MIN_VALUE"]
-        ):  # value to be stored in config
+        if total_account_balance <= ACCOUNT_BALANCE_CONFIG["MIN_VALUE"]:
             credit_score = CREDIT_SCORE_CONFIG["MIN_SCORE"]
         elif total_account_balance >= ACCOUNT_BALANCE_CONFIG["MAX_VALUE"]:
             credit_score = CREDIT_SCORE_CONFIG["MAX_SCORE"]
@@ -48,7 +55,10 @@ class UserRegistrationService:
             balance_change = ACCOUNT_BALANCE_CONFIG["BALANCE_CHANGE"]
             increment = ACCOUNT_BALANCE_CONFIG["INCREMENT"]
             credit_score = (total_account_balance // balance_change) + increment
+        
+        self.user_information_db_service.save_credit_score(aadhar_id, credit_score)
 
+        return {'message': 'credit score calculated and stored'}
 
 class LoanApplicationService:
     def __init__(self) -> None:
@@ -58,40 +68,56 @@ class LoanApplicationService:
         self.loan_calculations = LoanCalculations()
 
     def is_loan_applicable(
-        self, user, loan_type, loan_amount, interest_rate, term_period, is_valid=False
+        self, user, loan_type, loan_amount, interest_rate, term_period
     ):
         response = {}
         if loan_type not in SUPPORTED_LOAN_TYPES:
-            response["message"] = "loan type not supported"
-            return response
-
+            return {
+                'message': 'loan type not supported'
+            }
+        
         loan_bound_amount = LOAN_BOUNDS[loan_type]
         if loan_amount > loan_bound_amount:
-            response["message"] = f"loan amount is out of bounds for {loan_type} loan"
-            return response
+            return {
+                'message': f'loan amount is out of bounds for {loan_type} loan'
+            }
 
         elif user.annual_income >= USER_INCOME_FOR_LOAN:
-            response["message"] = "user income below income limit to apply for loan"
+            return {
+                'message': 'user income below income limit to apply for loan'
+            }
 
         elif interest_rate <= 14:
-            response["message"] = "interest below the threshold rate"
-
-        # check and return
-
-        interest = self.loan_calculations.calculate_interest(
-            loan_amount, interest_rate, term_period
-        )
+            return {
+                'message': 'interest below the threshold rate'
+            }
+    
         if interest < 10000:
             response["message"] = "interest amount below threshold"
 
         EMI_due = self.loan_calculations.calculate_emi(
             loan_amount, interest_rate / 12, term_period
         )
+        interest = loan_amount-EMI_due
+
+        if interest < 10000:
+            return {
+                'message': 'interest amount below threshold'
+            }
+
         monthly_income = user.annual_income / 12
         if EMI_due > 0.6 * monthly_income:
-            response["message"] = "EMI due is more than 60% of the monthly income"
+            return {
+                'message': 'EMI due is more than 60% of the monthly income'
+            }
 
-        return response
+        return {
+            'message': 'Loan is Applicable',
+            'data': {
+                'emi_due': EMI_due,
+                'interest_amount': interest
+                }
+            }
 
     def apply_loan(self, payload):
         user_uuid = payload.get("user_uuid")
@@ -103,17 +129,22 @@ class LoanApplicationService:
 
         user = self.user_information_db_service.get_user_by_uuid(user_uuid=user_uuid)
         response = {}
-        if user is None:
-            response["message"] = "user is not registered"
+        if user:
+            return {
+                'message': 'user is already registered' 
+            }
 
         response = self.is_loan_applicable(
             user, loan_type, loan_amount, interest_rate, term_period
         )
 
-        if not response["is_loan_applicable"]:
-            pass
+        if not response.get('data'):
+            reason = response['message']
+            return {
+                'message': f'Loan not applicable -> {reason}'
+            }
         else:
-            loan_id = self.loan_info_db_service.create_entry(
+            loan_info = self.loan_info_db_service.create_entry(
                 user.user_uuid,
                 loan_type,
                 loan_amount,
@@ -122,39 +153,46 @@ class LoanApplicationService:
                 disbursement_date,
             )
 
-            emi_due = 0
+            emi_due = response['emi_due']
+            loan_id = loan_info.loan_id
+
             self.emi_details_db_service.save_emi_details(
                 loan_id, emi_due, disbursement_date, term_period
             )
 
-            emi_dues_information = self.emi_details_db_service.get_emi_details(loan_id)
+            emi_dues_information = self.emi_details_db_service.get_emi_details_by_loan_id(loan_id)
 
-            response = {}
+            data = {}
             for emi in emi_dues_information:
                 information = {
-                    "amount_due": emi.amount_due,
-                    "amount_paid": emi.amount_paid,
-                    "installment_date": emi.installment_date,
+                    'amount_due': emi.amount_due,
+                    'amount_paid': emi.amount_paid,
+                    'installment_date': emi.installment_date,
                 }
-                response["EMI_Details"].append(information)
+                data['EMI_Details'].append(information)
 
-            response["loan_id"]: loan_id
+            data['loan_id']: loan_id
+
+            response = {
+                'message': 'loan applied successfuly',
+                'data': data
+            }
             return response
 
 
 class LoanPaymentService:
-    def __init__(self) -> None:
+    def __init__(self):
         self.emi_details_db_service = EMIDetailsDbService()
         self.loan_info_db_service = LoanInformationDbService()
         self.loan_calculations = LoanCalculations()
 
     def make_payment(self, payload):
-        loan_id = payload.get("loan_id")
-        amount = payload.get("amount")
+        loan_id = payload.get('loan_id')
+        amount = payload.get('amount')
 
         loan_info = self.loan_info_db_service.get_loan_information(loan_id=loan_id)
         if not loan_info:
-            response = {"message": "loan not found"}
+            response = {'message': 'loan not found'}
             return response
 
         loan_id = loan_info.loan_id
@@ -168,8 +206,11 @@ class LoanPaymentService:
 
         if emi_details.amount_due > 0 and emi_details.amount_paid > 0:
             response = {
-                "message": "EMI already paid for this month",
-                "data": emi_details.installment_date,
+                'message': "EMI already paid for this month",
+                'data': {
+                    'emi_due': emi_details.amount_due,
+                    'installment_paid': emi_details.installment_date
+                }
             }
             return response
 
@@ -183,10 +224,14 @@ class LoanPaymentService:
             # if emi's due are zero update the amount_due to 0 for the next entries
             self.recalculate_and_update_emi(loan_id)
         response = {
-            "message": "EMI paid successfully for this month",
-            "data": emi_details,
+            'message': 'EMI paid successfully for this month',
+            'data': {
+                'emi_due': emi_details.amount_due,
+                'emi_paid': emi_details.amount_paid,
+                'installment_paid': emi_details.installment_date
+            }
         }
-        return
+        return response
 
     def recalculate_and_update_emi(self, loan_id):
         amount_with_interest_till_now = (
@@ -217,3 +262,46 @@ class LoanPaymentService:
         )
 
         self.emi_details_db_service.update_due_amount(loan_id, updated_emis)
+
+class PostTransactionService:
+
+    def __init__(self) -> None:
+        self.emi_details_db_service = EMIDetailsDbService()
+        self.loan_info_db_service = LoanInformationDbService()
+
+    def get_transaction_statement(self, loan_id):
+
+        loan_info = self.loan_info_db_service.get_loan_information(loan_id)
+
+        if not loan_info:
+            return {
+                'message': 'no loan has been applied'
+            }
+
+        past_transactions = self.emi_details_db_service.get_paid_emi_details(loan_id=loan_info.loan_id) 
+        upcoming_transactions = self.emi_details_db_service.get_unpaid_emi_details(loan_id=loan_info.loan_id)
+
+        past_transactions_list = []
+        for transaction in past_transactions:
+            info = {
+                'amount_paid': transaction.amount_paid,
+                'installment_date': transaction.installment_date
+            }
+            past_transactions_list.append(info)
+
+        upcoming_transactions_list = []
+        for transaction in upcoming_transactions:
+            info = {
+                'amount_due': transaction.amount_due,
+                'installment_date': transaction.installment_date
+            }
+            upcoming_transactions_list.append(info)
+    
+        response = {
+            'message': 'success',
+            'data': {
+                'upcoming_transactions': upcoming_transactions_list,
+                'past_transactions': past_transactions_list
+            }
+        }
+        return response

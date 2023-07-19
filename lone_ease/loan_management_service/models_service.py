@@ -14,12 +14,27 @@ class UserInformationDbService:
     def get_user_by_uuid(self, user_uuid):
         return self.user_information.objects.filter(user_uuid=user_uuid).first()
     
-    def create_user(self, )
+    def create_user(self, name, email_id, annual_income, aadhar_id):
+        return self.user_information.objects.create(
+            name=name, email=email_id, annual_income=annual_income, aadhar_id=aadhar_id
+        )
+    
+    def get_user_by_aadhar(self, aadhar_id):
+        return self.user_information.objects.filter(aadhar_id=aadhar_id).first()
+    
+    def save_credit_score(self, aadhar_id, credit_score):
+        self.user_information.objects.filter(aadhar_id=aadhar_id).update(credit_score=credit_score)
 
 class UserTransactionInformationDbService:
 
     def __init__(self):
         self.user_transaction_information = UserTransactionInformation
+    
+    def get_transactions_sum(self, aadhar_id, transaction_type):
+        self.user_transaction_information.objects.filter(
+            aadhar_id=aadhar_id, transaction_type=transaction_type.upper()
+        ).aggregate(total_amount=Sum("amount"))
+    
 
 class LoanInformationDbService:
 
@@ -76,4 +91,14 @@ class EMIDetailsDbService:
     
     def update_due_amount(self, loan_id, amount):
         return self.emi_details.objects.filter(loan_id=loan_id, amount_due__gt=0, amount_paid=0).update(amount_due=amount)
+    
+    def get_paid_emi_details(self, loan_id):
+        return self.emi_details.objects.filter(
+            loan_id=loan_id, amount_due__gt=0, amount_paid__gt=0
+        ).values()
+    
+    def get_unpaid_emi_details(self, loan_id):
+        return self.emi_details.objects.filter(
+            loan_id=loan_id, amount_due__gt=0, amount_paid=0
+        ).values()
     
