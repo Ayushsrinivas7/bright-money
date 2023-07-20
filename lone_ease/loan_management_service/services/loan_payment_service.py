@@ -90,7 +90,7 @@ class LoanPaymentService:
         #     principle_loan, interest_rate, no_of_emis_paid_till_now
         # )
 
-        interest = int(44870/loan_info.term_period)
+        interest = int(44870/loan_info.term_period) # This to be fetched from the loan_info.total_interest_amount
         interest_paid_till_now = interest*no_of_emis_paid_till_now
 
         print("INTEREST PAID TILL NOW",interest_paid_till_now)
