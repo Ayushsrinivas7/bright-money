@@ -1,5 +1,5 @@
 from ..models_service import UserInformationDbService, UserTransactionInformationDbService
-from ..constants import ACCOUNT_BALANCE_CONFIG, CREDIT_SCORE_CONFIG
+from ..tasks import calculate_credit_score
 
 class UserRegistrationService:
     def __init__(self):
@@ -20,36 +20,12 @@ class UserRegistrationService:
         user = self.user_information_db_service.create_user(name, email_id, annual_income, aadhar_id)
 
         # calculating credit score which will be invoked in a celery task further
-        response = self.calculate_credit_score(user.aadhar_id)
-        if response.get('message'):
-            return {
-                'message': 'user successfully registered',
-                'data': {
-                    'user_uuid': user.user_uuid
-                }}
-        else:
-            return {'message': 'Not able to calculate credit score'}
+        response = calculate_credit_score.delay(user)
+       
+        response = {
+                    'message': 'user successfully registered',
+                    'data': {
+                        'user_uuid': user.user_uuid
+                    }}
         
-    def calculate_credit_score(self, aadhar_id):
-
-
-        total_credit = self.user_transaction_db_service.get_transactions_sum(aadhar_id, "CREDIT")
-        total_debit = self.user_transaction_db_service.get_transactions_sum(aadhar_id, "DEBIT")
-
-        total_credit_amount = int(total_credit["total_amount"])
-        total_debit_amount = int(total_debit["total_amount"])
-
-        total_account_balance = total_credit_amount-total_debit_amount
-        credit_score = 0
-        if total_account_balance <= ACCOUNT_BALANCE_CONFIG["MIN_VALUE"]:
-            credit_score = CREDIT_SCORE_CONFIG["MIN_SCORE"]
-        elif total_account_balance >= ACCOUNT_BALANCE_CONFIG["MAX_VALUE"]:
-            credit_score = CREDIT_SCORE_CONFIG["MAX_SCORE"]
-        else:
-            balance_change = ACCOUNT_BALANCE_CONFIG["BALANCE_CHANGE"]
-            increment = ACCOUNT_BALANCE_CONFIG["INCREMENT"]
-            credit_score = (total_account_balance // balance_change) + increment
-        
-        self.user_information_db_service.save_credit_score(aadhar_id, credit_score)
-
-        return {'message': 'credit score calculated and stored'}
+        return response
