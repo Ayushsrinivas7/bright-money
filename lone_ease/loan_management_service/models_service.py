@@ -46,9 +46,9 @@ class LoanInformationDbService:
         loan_information = self.loan_information.objects.filter(loan_id=loan_id).first()
         return loan_information
 
-    def create_entry(self, user_uuid, loan_type, loan_amount, interest_rate, term_period):
+    def create_entry(self, user_uuid, loan_type, loan_amount, interest_rate, term_period, disbursement_date):
 
-        loan_info_model = self.loan_information.objects.create(user_uuid=user_uuid, loan_type=loan_type, loan_amount=loan_amount, interest_rate=interest_rate, term_period=term_period)
+        loan_info_model = self.loan_information.objects.create(user_uuid_id=user_uuid, loan_type=loan_type, loan_amount=loan_amount, annual_interest_rate=interest_rate, term_period=term_period, disbursement_date=disbursement_date)
         return loan_info_model.loan_id  
 
 class EMIDetailsDbService:
@@ -76,29 +76,33 @@ class EMIDetailsDbService:
     
     def get_emi_details_by_installment_date(self, loan_id, installment_date):
 
-        emi_details = self.emi_details.objects.filter(loan_id=loan_id, installment_date=installment_date).first()
+        emi_details = self.emi_details.objects.filter(loan_id_id=loan_id, installment_date=installment_date).first()
         return emi_details
+    
+    def check_past_dues(self, loan_id, installment_date):
+        
+        return self.emi_details.objects.filter(loan_id=loan_id, installment_date__lt=installment_date).exists()
 
     def update_paid_amount(self, loan_id, amount, installment_date):
-        self.emi_details.objects.filter(loan_id=loan_id, installment_date=installment_date).update(amount_paid=amount)
+        self.emi_details.objects.filter(loan_id_id=loan_id, installment_date=installment_date).update(amount_paid=amount)
 
     def get_sum_of_paid_emis(self, loan_id):
-        paid_emis_sum = self.emi_details.objects.filter(loan_id=loan_id,amount_due__gt=0, amount_paid__gt=0).aggregate(total_amount=Sum('amount_paid'))
+        paid_emis_sum = self.emi_details.objects.filter(loan_id_id=loan_id,amount_due__gt=0, amount_paid__gt=0).aggregate(total_amount=Sum('amount_paid'))
         return paid_emis_sum['total_amount']
 
     def no_of_emis_paid(self, loan_id):
-        return self.emi_details.objects.filter(loan_id=loan_id, amount_due__gt=0, amount_paid__gt=0).count()
+        return self.emi_details.objects.filter(loan_id_id=loan_id, amount_due__gt=0, amount_paid__gt=0).count()
     
     def update_due_amount(self, loan_id, amount):
-        return self.emi_details.objects.filter(loan_id=loan_id, amount_due__gt=0, amount_paid=0).update(amount_due=amount)
+        return self.emi_details.objects.filter(loan_id_id=loan_id, amount_due__gt=0, amount_paid=0).update(amount_due=amount)
     
     def get_paid_emi_details(self, loan_id):
         return self.emi_details.objects.filter(
-            loan_id=loan_id, amount_due__gt=0, amount_paid__gt=0
-        ).values()
+            loan_id_id=loan_id, amount_due__gt=0, amount_paid__gt=0
+        ).all()
     
     def get_unpaid_emi_details(self, loan_id):
         return self.emi_details.objects.filter(
-            loan_id=loan_id, amount_due__gt=0, amount_paid=0
-        ).values()
+            loan_id_id=loan_id, amount_due__gt=0, amount_paid=0
+        ).all()
     

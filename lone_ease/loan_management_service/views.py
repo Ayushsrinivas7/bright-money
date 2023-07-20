@@ -1,17 +1,18 @@
 import json
+import uuid
 
 from django.http import HttpResponse
-from .services.loan_application_service import (LoanApplicationService,
-                                                UserRegistrationService,
-                                                LoanPaymentService,
-                                                UserRegistrationService,
-                                                PostTransactionService)
+from .services.user_registration_service import UserRegistrationService
+from .services.loan_application_service import LoanApplicationService
+from .services.loan_payment_service import LoanPaymentService
+from .services.post_transaction_service import PostTransactionService 
+                                    
 
 app_name = "loan_management_service"
 
 # Create your views here.
 def register_user(request):
-    print(request.method)
+
     if request.method == "POST":
         payload = json.loads(request.body)
         response = UserRegistrationService().register_user(payload)
@@ -19,6 +20,7 @@ def register_user(request):
         if not response.get('data'):
             pass
         try:
+            print(response)
             return HttpResponse(
                 json.dumps(response), status=201, content_type="application/json"
             )
@@ -35,15 +37,14 @@ def register_user(request):
 
 def apply_loan(request):
     if request.method == "POST":
-        payload = json.loadds(request.body)
+        payload = json.loads(request.body)
         response = LoanApplicationService().apply_loan(payload)
+        print(response)
         if not response.get("data"):
-            response = response["data"]
-            return HttpResponse(
+            response = response["message"]
+        return HttpResponse(
                 json.dumps(response), status=201, content_type="application/json"
             )
-        else:
-            pass
     return HttpResponse(status=401)
 
 
@@ -51,13 +52,14 @@ def make_payment(request):
     if request.method == "POST":
         payload = json.loads(request.body)
         response = LoanPaymentService().make_payment(payload)
+        print(response)
         if not response.get("data"):
-            response = response["data"]
-            return HttpResponse(
+            response["success"] = 'False'
+        else:
+            response['success'] = 'True'
+        return HttpResponse(
                 json.dumps(response), status=201, content_type="application/json"
             )
-        else:
-            pass
 
 def get_statement(request, loan_id):
     """
@@ -71,8 +73,17 @@ def get_statement(request, loan_id):
     # Past Transactions
     if request.method == "GET":
         
-        response = PostTransactionService().get_transaction_statement(loan_id)
-        if not response.get('data'):
-            pass
+        print(loan_id)
+
+        loan_id_uuid = uuid.UUID(loan_id)
+        response = PostTransactionService().get_transaction_statement(loan_id_uuid)
+
+        if not response.get("data"):
+            response["success"] = 'False'
+        else:
+            response['success'] = 'True'
+        return HttpResponse(
+                json.dumps(response), status=201, content_type="application/json"
+            )
 
 

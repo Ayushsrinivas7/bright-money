@@ -11,11 +11,11 @@ class LoanCalculations:
         interest = (principle_amount * interest_rate * tenure) / 100
         return interest
 
-    def calculate_emi(principal_amount, monthly_rate, tenure):
+    def calculate_emi(self, principal_amount, monthly_rate, tenure):
         emi = (principal_amount * monthly_rate * (1 + monthly_rate) ** tenure) / (
             (1 + monthly_rate) ** tenure - 1
         )
-        return emi
+        return int(emi)
 
-    def calculate_interest(principal, interest, tenure):
-        return principal * interest * tenure
+    def calculate_interest(self, principal, interest, tenure):
+        return int(principal * interest * tenure)
