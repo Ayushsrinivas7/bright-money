@@ -7,7 +7,6 @@ from django.test import TestCase, Client
 from urllib.parse import urlencode
 
 from .models import UserInformation, UserTransactionInformation, LoanInfo, EMIDetails
-from .views import register_user, make_payment, apply_loan, get_statement
 
 # Create your tests here.
 class TestLoanManagementService(TestCase):

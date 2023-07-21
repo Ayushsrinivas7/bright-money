@@ -2,7 +2,6 @@ from loan_management_service.constants import (LOAN_BOUNDS,
                                                SUPPORTED_LOAN_TYPES,
                                                USER_INCOME_FOR_LOAN)
 
-
 class LoanCalculations:
     def __init__(self):
         pass
