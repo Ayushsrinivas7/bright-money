@@ -84,7 +84,7 @@ class EMIDetailsDbService:
     
     def check_past_dues(self, loan_id, installment_date):
         
-        return self.emi_details.objects.filter(loan_id_id=loan_id, installment_date__lt=installment_date, amount_paid=0).exists()
+        return self.emi_details.objects.filter(loan_id_id=loan_id, installment_date__lt=installment_date, amount_due__gt=0, amount_paid=0).exists()
 
     def update_paid_amount(self, loan_id, amount, installment_date):
         self.emi_details.objects.filter(loan_id_id=loan_id, installment_date=installment_date).update(amount_paid=amount)

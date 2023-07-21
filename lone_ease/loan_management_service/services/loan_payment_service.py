@@ -51,18 +51,13 @@ class LoanPaymentService:
             }
             return response
 
-        if amount < emi_details.amount_due:
-            return {
-                'message': 'amount paid is smaller than emi due for the month'
-            }
-        
         emi_details.amount_paid = amount
         emi_details.save()
-        if amount > emi_details.amount_due:
+        if amount > emi_details.amount_due or amount < emi_details.amount_due:
             self.recalculate_and_update_emi(loan_id)
-            
+
         response = {
-            'message': 'EMI paid successfully for this month',
+            'message': 'Amount paid successfully for this month',
             'data': {
                 'emi_due': emi_details.amount_due,
                 'emi_paid': emi_details.amount_paid,
@@ -90,14 +85,12 @@ class LoanPaymentService:
         )
 
         if principle_amount_outstanding <= 0:
-            rows_updated = self.emi_details_db_service.update_due_amount(loan_id, 0)
-            if rows_updated == 0:
-                response = {'message': 'EMI paid for all months'}
-                return response
-
+            self.emi_details_db_service.update_due_amount(loan_id, 0)
+            return
+        
         tenure = loan_info.term_period - no_of_emis_paid_till_now
         updated_emis = self.loan_calculations.calculate_emi(
             principle_amount_outstanding, interest_rate/12, tenure
         )
-        self.emi_details_db_service.update_due_amount(loan_id, updated_emis)
 
+        self.emi_details_db_service.update_due_amount(loan_id, updated_emis)
