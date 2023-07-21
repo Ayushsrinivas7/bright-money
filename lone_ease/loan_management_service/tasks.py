@@ -1,13 +1,13 @@
-from celery import shared_task
+from lone_ease.celery import celery_app
 from .constants import ACCOUNT_BALANCE_CONFIG, CREDIT_SCORE_CONFIG
-from .models_service import UserTransactionInformationDbService
+from .models_service import UserInformationDbService,UserTransactionInformationDbService
 
-@shared_task
-def calculate_credit_score(user):
+@celery_app.task
+def calculate_credit_score(aadhar_id):
 
     user_transaction_db_service = UserTransactionInformationDbService()
-    total_credit = user_transaction_db_service.get_transactions_sum(user.aadhar_id, "CREDIT")
-    total_debit = user_transaction_db_service.get_transactions_sum(user.aadhar_id, "DEBIT")
+    total_credit = user_transaction_db_service.get_transactions_sum(aadhar_id, "CREDIT")
+    total_debit = user_transaction_db_service.get_transactions_sum(aadhar_id, "DEBIT")
 
     total_credit_amount = int(total_credit["total_amount"])
     total_debit_amount = int(total_debit["total_amount"])
@@ -21,7 +21,6 @@ def calculate_credit_score(user):
     else:
         balance_change = ACCOUNT_BALANCE_CONFIG["BALANCE_CHANGE"]
         increment = ACCOUNT_BALANCE_CONFIG["INCREMENT"]
-        credit_score = (total_account_balance // balance_change) + increment
-    
-    user.credit_score = credit_score
-    user.save()
+        credit_score = (total_account_balance // balance_change) + increment + CREDIT_SCORE_CONFIG["MIN_SCORE"]
+
+    UserInformationDbService().save_credit_score(aadhar_id, credit_score)

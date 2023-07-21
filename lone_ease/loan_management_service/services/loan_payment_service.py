@@ -21,28 +21,28 @@ class LoanPaymentService:
             return response
 
         loan_id = loan_info.loan_id
-        # installment_date = datetime(
-        #     datetime.now().year, datetime.now().month, 1
-        # )  # starting of the current month and year
+        installment_date = datetime(
+            datetime.now().year, datetime.now().month, 1
+        )
 
-        installment_date = datetime(2023, 10, 1)
         emi_details = self.emi_details_db_service.get_emi_details_by_installment_date(
             loan_info.loan_id, installment_date
         )
+
         if not emi_details:
             return {
                 'message': 'No emi found for this month'
             }
 
         past_dues_pending = self.emi_details_db_service.check_past_dues(loan_id, installment_date)
-        if past_dues_pending:
+        if past_dues_pending:   
             return {
                 'message': 'past dues are pending please complete those first'
             }
         
         if (emi_details.amount_due > 0 and emi_details.amount_paid > 0) or emi_details.amount_due==0:
             response = {
-                'message': "EMI already paid for this month",
+                'message': 'EMI already paid for this month',
                 'data': {
                     'emi_due': emi_details.amount_due,
                     'emi_paid': emi_details.amount_paid,
@@ -76,43 +76,28 @@ class LoanPaymentService:
             self.emi_details_db_service.get_sum_of_paid_emis(loan_id)
         )
 
-        print("AMOUNT WITH INTEREST", amount_with_interest_till_now)
-
         no_of_emis_paid_till_now = self.emi_details_db_service.no_of_emis_paid(loan_id)
-
-        print("NO OF EMIS PAID TILL NOW", no_of_emis_paid_till_now)
-
         loan_info = self.loan_info_db_service.get_loan_information(loan_id)
         principle_loan = loan_info.loan_amount
-        interest_rate = loan_info.annual_interest_rate / (12*100)
+        interest_rate = loan_info.annual_interest_rate / 100
 
-        # interest_paid_till_now = self.loan_calculations.calculate_interest(
-        #     principle_loan, interest_rate, no_of_emis_paid_till_now
-        # )
-
-        interest = int(44870/loan_info.term_period) # This to be fetched from the loan_info.total_interest_amount
-        interest_paid_till_now = interest*no_of_emis_paid_till_now
-
-        print("INTEREST PAID TILL NOW",interest_paid_till_now)
+        interest_paid_till_now = self.loan_calculations.calculate_compound_interest(
+            principle_loan, interest_rate, no_of_emis_paid_till_now
+        )
 
         principle_amount_outstanding = principle_loan - (
             amount_with_interest_till_now - interest_paid_till_now
         )
 
-        print("PRINCIPAL AMOUNT OUTSTANDING", principle_amount_outstanding)
-
         if principle_amount_outstanding <= 0:
             rows_updated = self.emi_details_db_service.update_due_amount(loan_id, 0)
-            print("ROWS UPDATED", rows_updated)
             if rows_updated == 0:
-                response = {"message": "EMI paid for all months"}
+                response = {'message': 'EMI paid for all months'}
                 return response
 
         tenure = loan_info.term_period - no_of_emis_paid_till_now
         updated_emis = self.loan_calculations.calculate_emi(
-            principle_amount_outstanding, interest_rate, tenure
+            principle_amount_outstanding, interest_rate/12, tenure
         )
-
-        print("UPDATED EMI", updated_emis)
         self.emi_details_db_service.update_due_amount(loan_id, updated_emis)
 

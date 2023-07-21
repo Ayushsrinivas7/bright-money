@@ -30,8 +30,11 @@ class UserTransactionInformationDbService:
     def __init__(self):
         self.user_transaction_information = UserTransactionInformation
     
+    def is_user_transaction_exist(self, aadhar_id):
+        return self.user_transaction_information.objects.filter(aadhar_id=aadhar_id).exists()
+
     def get_transactions_sum(self, aadhar_id, transaction_type):
-        self.user_transaction_information.objects.filter(
+        return self.user_transaction_information.objects.filter(
             aadhar_id=aadhar_id, transaction_type=transaction_type.upper()
         ).aggregate(total_amount=Sum("amount"))
     
@@ -64,14 +67,14 @@ class EMIDetailsDbService:
         emi_models = []
         for i in range(1, term_period+1):
             installment_date = (disbursement_date.replace(day=1) + relativedelta(months=i)).date()
-            emi_model = self.emi_details(loan_id=loan_id, amount_due=emi_due, amount_paid=0, installment_date=installment_date)
+            emi_model = self.emi_details(loan_id_id=loan_id, amount_due=emi_due, amount_paid=0, installment_date=installment_date)
             emi_models.append(emi_model)
 
         self.add_bulk(emi_models)
     
     def get_emi_details_by_loan_id(self, loan_id):
 
-        emi_detail_objects = self.emi_details.objects.filter(loan_id=loan_id).all()
+        emi_detail_objects = self.emi_details.objects.filter(loan_id_id=loan_id).all()
         return emi_detail_objects     
     
     def get_emi_details_by_installment_date(self, loan_id, installment_date):
@@ -81,7 +84,7 @@ class EMIDetailsDbService:
     
     def check_past_dues(self, loan_id, installment_date):
         
-        return self.emi_details.objects.filter(loan_id=loan_id, installment_date__lt=installment_date).exists()
+        return self.emi_details.objects.filter(loan_id_id=loan_id, installment_date__lt=installment_date, amount_paid=0).exists()
 
     def update_paid_amount(self, loan_id, amount, installment_date):
         self.emi_details.objects.filter(loan_id_id=loan_id, installment_date=installment_date).update(amount_paid=amount)

@@ -12,7 +12,7 @@ class PostTransactionService:
 
         if not loan_info:
             return {
-                'message': 'no loan has been applied'
+                'message': 'no loan found against this loan id'
             }
 
         past_transactions = self.emi_details_db_service.get_paid_emi_details(loan_id=loan_info.loan_id) 
@@ -35,7 +35,7 @@ class PostTransactionService:
             upcoming_transactions_list.append(info)
     
         response = {
-            'message': 'success',
+            'message': 'successfully fetched transactions',
             'data': {
                 'upcoming_transactions': upcoming_transactions_list,
                 'past_transactions': past_transactions_list

@@ -17,5 +17,7 @@ class LoanCalculations:
         )
         return int(emi)
 
-    def calculate_interest(self, principal, interest, tenure):
-        return int(principal * interest * tenure)
+    def calculate_compound_interest(self, principal, interest, tenure):
+        
+        interest = (principal*((1+(interest/12)))**(tenure)) - principal
+        return int(interest)

@@ -1,5 +1,5 @@
 from datetime import datetime
-from ..constants import LOAN_BOUNDS, SUPPORTED_LOAN_TYPES, USER_INCOME_FOR_LOAN
+from ..constants import LOAN_BOUNDS, SUPPORTED_LOAN_TYPES, USER_INCOME_FOR_LOAN, THRESHOLD_INTEREST_RATE, THRESHOLD_INTEREST_AMOUNT, MIN_CREDIT_SCORE
 from ..models_service import (EMIDetailsDbService, LoanInformationDbService,
                               UserInformationDbService)
 from ..utils import LoanCalculations
@@ -16,7 +16,10 @@ class LoanApplicationService:
     def is_loan_applicable(
         self, user, loan_type, loan_amount, interest_rate, term_period
     ):
-        response = {}
+        if user.credit_score < MIN_CREDIT_SCORE:
+            return {
+                'message': 'credit score below threshold value'
+            }
         if loan_type not in SUPPORTED_LOAN_TYPES:
             return {
                 'message': 'loan type not supported'
@@ -25,7 +28,7 @@ class LoanApplicationService:
         loan_bound_amount = LOAN_BOUNDS[loan_type]
         if loan_amount > loan_bound_amount:
             return {
-                'message': f'loan amount is out of bounds for {loan_type} loan'
+                'message': f'loan amount is out of bounds'
             }
 
         elif user.annual_income < USER_INCOME_FOR_LOAN:
@@ -33,22 +36,20 @@ class LoanApplicationService:
                 'message': 'user income below income limit to apply for loan'
             }
 
-        elif interest_rate <= 14:
+        elif interest_rate < THRESHOLD_INTEREST_RATE:
             return {
-                'message': 'interest below the threshold rate'
+                'message': 'interest below the threshold interest rate'
             }
 
         monthly_interest = interest_rate/(100*12)
         EMI_due = self.loan_calculations.calculate_emi(
             loan_amount, monthly_interest, term_period
         )
-        interest = (EMI_due*term_period)-loan_amount
 
-        print(interest)
-        print(EMI_due)
-        if interest < 10000:
+        interest_amount = self.loan_calculations.calculate_compound_interest(loan_amount, interest_rate/100, term_period)
+        if interest_amount <= THRESHOLD_INTEREST_AMOUNT:
             return {
-                'message': 'interest amount below threshold'
+                'message': 'interest amount below threshold amount'
             }
 
         monthly_income = user.annual_income // 12
@@ -60,8 +61,7 @@ class LoanApplicationService:
         return {
             'message': 'Loan is Applicable',
             'data': {
-                'emi_due': EMI_due,
-                'interest_amount': interest
+                'emi_due': EMI_due
                 }
             }
 
@@ -102,19 +102,15 @@ class LoanApplicationService:
             )
 
             emi_due = response['data']['emi_due']
-            print(loan_id)
-
-            loan_info_instance = self.loan_info_db_service.get_loan_information(loan_id)
 
             self.emi_details_db_service.save_emi_details(
-                loan_info_instance, emi_due, disbursement_date_obj, term_period
+                loan_id, emi_due, disbursement_date_obj, term_period
             )
 
-            emi_dues_information = self.emi_details_db_service.get_emi_details_by_loan_id(loan_info_instance)
+            emi_dues_information = self.emi_details_db_service.get_emi_details_by_loan_id(loan_id)
 
             data = {'EMI_details': []}
             data['loan_id'] = str(loan_id)
-            data['interest_amount'] = response['data']['interest_amount']
             for emi in emi_dues_information:
                 information = {
                     'amount_due': emi.amount_due,
