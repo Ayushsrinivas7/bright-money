@@ -19,13 +19,16 @@
 
 ### Entities 
 
-1. Message
+1. UserInformation
+2. UserTransactionInformation
+3. LoanInfo
+4. EMIDetails
 
 ### Database Models
 
 UserInformation:
 
-	name: name of the user (Assumed to be unique)
+	name: name of the user
 	email: email of the user
 	annual_income: annual_income of the user
 	aadhar_id: aadhar_id of the user which is a unique field
