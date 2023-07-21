@@ -180,5 +180,13 @@ get_statement -
                             },
                   "success": "True"
                 }
-              
-   
+		
+### EMI Calculations
+
+EMI is calculated by the given formula :
+
+	EMI = P x [R x (1+R)^n]/[{(1+R)^n}-1]
+	Where:
+		P = Principal loan amount
+		R = Periodic interest rate (annual interest rate in decimal/12)
+		n = Repayment tenure in months
